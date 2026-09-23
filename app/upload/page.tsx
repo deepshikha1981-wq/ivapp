@@ -56,6 +56,18 @@ export default function UploadPage() {
     }
   }
 
+  const handleDelete = async (fileName: string) => {
+    const confirmed = confirm('Delete this invoice? This cannot be undone.')
+    if (!confirmed) return
+
+    const { error } = await supabase.storage.from('invoices').remove([fileName])
+    if (error) {
+      alert('Delete failed: ' + error.message)
+    } else {
+      fetchFiles()
+    }
+  }
+
   return (
     <div style={{ padding: 40 }}>
       <h1>Invoice Upload Test</h1>
@@ -79,7 +91,12 @@ export default function UploadPage() {
       <h2>Uploaded Files</h2>
       <ul>
         {files.map((name) => (
-          <li key={name}>{name}</li>
+          <li key={name}>
+            {name}{' '}
+            <button onClick={() => handleDelete(name)} style={{ marginLeft: 10 }}>
+              Delete
+            </button>
+          </li>
         ))}
       </ul>
     </div>
