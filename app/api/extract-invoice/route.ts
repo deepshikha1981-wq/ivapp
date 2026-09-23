@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     const prompt = 'Extract the following fields from this invoice and return ONLY valid JSON, no extra text, no markdown formatting: vendor_name, gstin, invoice_number, invoice_date, taxable_amount, cgst, sgst, igst, total_amount'
 
     const geminiRes = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + process.env.GEMINI_API_KEY,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=' + process.env.GEMINI_API_KEY,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -30,7 +30,11 @@ export async function POST(req: NextRequest) {
     )
 
     const geminiData = await geminiRes.json()
-    const textOutput = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'No response'
+    const textOutput = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
+
+    if (!textOutput) {
+      return NextResponse.json({ raw: JSON.stringify(geminiData) })
+    }
 
     return NextResponse.json({ raw: textOutput })
   } catch (err: any) {
