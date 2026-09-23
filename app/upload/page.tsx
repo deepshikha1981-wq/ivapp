@@ -22,7 +22,8 @@ export default function UploadPage() {
   const handleUpload = async () => {
     if (!file) return
     setUploading(true)
-    const { error } = await supabase.storage.from('invoices').upload(file.name, file)
+     const cleanName = Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+     const { error } = await supabase.storage.from('invoices').upload(cleanName, file)
     setUploading(false)
     if (error) {
       alert('Upload failed: ' + error.message)
