@@ -10,6 +10,9 @@ type Line = {
 }
 
 export default function VoucherPage() {
+  const [authorized, setAuthorized] = useState(false)
+  const [passcodeInput, setPasscodeInput] = useState('')
+
   const [ledgers, setLedgers] = useState<string[]>([])
   const [newLedgerName, setNewLedgerName] = useState('')
   const [addingLedger, setAddingLedger] = useState(false)
@@ -27,6 +30,21 @@ export default function VoucherPage() {
   ])
   const [saving, setSaving] = useState(false)
 
+  useEffect(() => {
+    if (sessionStorage.getItem('team_authorized') === 'yes') {
+      setAuthorized(true)
+    }
+  }, [])
+
+  const checkPasscode = () => {
+    if (passcodeInput === process.env.NEXT_PUBLIC_TEAM_PASSCODE) {
+      sessionStorage.setItem('team_authorized', 'yes')
+      setAuthorized(true)
+    } else {
+      alert('Incorrect passcode.')
+    }
+  }
+
   const fetchLedgers = async () => {
     const { data } = await supabase.from('ledgers').select('name')
     if (data) {
@@ -35,8 +53,10 @@ export default function VoucherPage() {
   }
 
   useEffect(() => {
-    fetchLedgers()
-  }, [])
+    if (authorized) {
+      fetchLedgers()
+    }
+  }, [authorized])
 
   const handleAddLedger = async () => {
     if (!newLedgerName.trim()) return
@@ -174,6 +194,22 @@ export default function VoucherPage() {
         { ledger: '', type: 'credit', amount: '' }
       ])
     }
+  }
+
+  if (!authorized) {
+    return (
+      <div style={{ padding: 40, maxWidth: 400 }}>
+        <h2>Team Access Only</h2>
+        <p>Please enter the team passcode to continue.</p>
+        <input
+          type="password"
+          value={passcodeInput}
+          onChange={(e) => setPasscodeInput(e.target.value)}
+          placeholder="Passcode"
+        />
+        <button onClick={checkPasscode} style={{ marginLeft: 10 }}>Enter</button>
+      </div>
+    )
   }
 
   return (
