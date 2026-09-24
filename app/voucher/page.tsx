@@ -11,6 +11,10 @@ type Line = {
 
 export default function VoucherPage() {
   const [ledgers, setLedgers] = useState<string[]>([])
+  const [file, setFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [extracting, setExtracting] = useState(false)
+
   const [voucherNumber, setVoucherNumber] = useState('')
   const [voucherDate, setVoucherDate] = useState('')
   const [narration, setNarration] = useState('')
@@ -29,6 +33,66 @@ export default function VoucherPage() {
     }
     fetchLedgers()
   }, [])
+
+  const handleUploadAndExtract = async () => {
+    if (!file) return
+    setUploading(true)
+
+    const cleanName = Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+    const { error } = await supabase.storage.from('invoices').upload(cleanName, file)
+    setUploading(false)
+
+    if (error) {
+      alert('Upload failed: ' + error.message)
+      return
+    }
+
+    const publicUrlData = supabase.storage.from('invoices').getPublicUrl(cleanName)
+    const fileUrl = publicUrlData.data.publicUrl
+
+    setExtracting(true)
+    const extractRes = await fetch('/api/extract-invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileUrl })
+    })
+    const extractResult = await extractRes.json()
+    setExtracting(false)
+
+    if (extractResult.error) {
+      alert('Extraction error: ' + extractResult.error)
+      return
+    }
+
+    let cleanedText = extractResult.raw.trim()
+    cleanedText = cleanedText.replace(/^```json/, '').replace(/^```/, '').replace(/```$/, '').trim()
+
+    try {
+      const parsed = JSON.parse(cleanedText)
+
+      setNarration(
+        (parsed.vendor_name || 'Unknown vendor') +
+        ' - Invoice ' + (parsed.invoice_number || '') +
+        (parsed.invoice_date ? ' dated ' + parsed.invoice_date : '')
+      )
+
+      const amount = parsed.total_amount || parsed.taxable_amount || ''
+
+      setLines([
+        { ledger: '', type: 'debit', amount: String(amount) },
+        { ledger: '', type: 'credit', amount: String(amount) }
+      ])
+
+      if (parsed.invoice_number) {
+        setVoucherNumber(parsed.invoice_number)
+      }
+      if (parsed.invoice_date) {
+        setVoucherDate(parsed.invoice_date)
+      }
+    } catch (e) {
+      alert('AI extraction did not return clean data. Raw response: ' + cleanedText)
+    }
+  }
 
   const updateLine = (index: number, field: keyof Line, value: string) => {
     const newLines = [...lines]
@@ -85,6 +149,7 @@ export default function VoucherPage() {
       alert('Voucher saved successfully!')
       setVoucherNumber('')
       setNarration('')
+      setFile(null)
       setLines([
         { ledger: '', type: 'debit', amount: '' },
         { ledger: '', type: 'credit', amount: '' }
@@ -94,7 +159,20 @@ export default function VoucherPage() {
 
   return (
     <div style={{ padding: 40, maxWidth: 700 }}>
-      <h1>Voucher Builder</h1>
+      <h1>Invoice to Voucher</h1>
+
+      <div style={{ padding: 15, background: '#f0f0f0', marginBottom: 25 }}>
+        <h3>Step 1: Upload Invoice</h3>
+        <input
+          type="file"
+          onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
+        />
+        <button onClick={handleUploadAndExtract} disabled={uploading || extracting}>
+          {uploading ? 'Uploading...' : extracting ? 'Reading with AI...' : 'Upload & Extract'}
+        </button>
+      </div>
+
+      <h3>Step 2: Review Voucher</h3>
 
       <div style={{ marginBottom: 15 }}>
         <label>Voucher Number: </label>
