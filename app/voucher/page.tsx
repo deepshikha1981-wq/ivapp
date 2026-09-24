@@ -11,6 +11,9 @@ type Line = {
 
 export default function VoucherPage() {
   const [ledgers, setLedgers] = useState<string[]>([])
+  const [newLedgerName, setNewLedgerName] = useState('')
+  const [addingLedger, setAddingLedger] = useState(false)
+
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [extracting, setExtracting] = useState(false)
@@ -24,15 +27,31 @@ export default function VoucherPage() {
   ])
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    const fetchLedgers = async () => {
-      const { data } = await supabase.from('ledgers').select('name')
-      if (data) {
-        setLedgers(data.map((l) => l.name))
-      }
+  const fetchLedgers = async () => {
+    const { data } = await supabase.from('ledgers').select('name')
+    if (data) {
+      setLedgers(data.map((l) => l.name))
     }
+  }
+
+  useEffect(() => {
     fetchLedgers()
   }, [])
+
+  const handleAddLedger = async () => {
+    if (!newLedgerName.trim()) return
+    setAddingLedger(true)
+    const { error } = await supabase.from('ledgers').insert({ name: newLedgerName.trim() })
+    setAddingLedger(false)
+
+    if (error) {
+      alert('Could not add ledger: ' + error.message)
+    } else {
+      setNewLedgerName('')
+      fetchLedgers()
+      alert('Ledger added! You can now select it from any dropdown below.')
+    }
+  }
 
   const handleUploadAndExtract = async () => {
     if (!file) return
@@ -182,6 +201,18 @@ export default function VoucherPage() {
       <div style={{ marginBottom: 15 }}>
         <label>Date: </label>
         <input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} />
+      </div>
+
+      <div style={{ padding: 10, background: '#eef7ee', marginBottom: 15 }}>
+        <label>New Ledger Name: </label>
+        <input
+          value={newLedgerName}
+          onChange={(e) => setNewLedgerName(e.target.value)}
+          placeholder="e.g. Repairs & Maintenance"
+        />
+        <button onClick={handleAddLedger} disabled={addingLedger} style={{ marginLeft: 10 }}>
+          {addingLedger ? 'Adding...' : '+ Add New Ledger'}
+        </button>
       </div>
 
       <h3>Ledger Lines</h3>
