@@ -17,6 +17,7 @@ export default function VoucherPage() {
   const [newLedgerName, setNewLedgerName] = useState('')
   const [addingLedger, setAddingLedger] = useState(false)
 
+  const [pendingFiles, setPendingFiles] = useState<string[]>([])
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [extracting, setExtracting] = useState(false)
@@ -52,9 +53,17 @@ export default function VoucherPage() {
     }
   }
 
+  const fetchPendingFiles = async () => {
+    const { data } = await supabase.storage.from('invoices').list()
+    if (data) {
+      setPendingFiles(data.map((f) => f.name))
+    }
+  }
+
   useEffect(() => {
     if (authorized) {
       fetchLedgers()
+      fetchPendingFiles()
     }
   }, [authorized])
 
@@ -73,22 +82,7 @@ export default function VoucherPage() {
     }
   }
 
-  const handleUploadAndExtract = async () => {
-    if (!file) return
-    setUploading(true)
-
-    const cleanName = Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9.]/g, '_')
-    const { error } = await supabase.storage.from('invoices').upload(cleanName, file)
-    setUploading(false)
-
-    if (error) {
-      alert('Upload failed: ' + error.message)
-      return
-    }
-
-    const publicUrlData = supabase.storage.from('invoices').getPublicUrl(cleanName)
-    const fileUrl = publicUrlData.data.publicUrl
-
+  const runExtraction = async (fileUrl: string) => {
     setExtracting(true)
     const extractRes = await fetch('/api/extract-invoice', {
       method: 'POST',
@@ -131,6 +125,30 @@ export default function VoucherPage() {
     } catch (e) {
       alert('AI extraction did not return clean data. Raw response: ' + cleanedText)
     }
+  }
+
+  const handleProcessExisting = async (fileName: string) => {
+    const publicUrlData = supabase.storage.from('invoices').getPublicUrl(fileName)
+    await runExtraction(publicUrlData.data.publicUrl)
+  }
+
+  const handleUploadAndExtract = async () => {
+    if (!file) return
+    setUploading(true)
+
+    const cleanName = Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+    const { error } = await supabase.storage.from('invoices').upload(cleanName, file)
+    setUploading(false)
+
+    if (error) {
+      alert('Upload failed: ' + error.message)
+      return
+    }
+
+    fetchPendingFiles()
+
+    const publicUrlData = supabase.storage.from('invoices').getPublicUrl(cleanName)
+    await runExtraction(publicUrlData.data.publicUrl)
   }
 
   const updateLine = (index: number, field: keyof Line, value: string) => {
@@ -216,8 +234,23 @@ export default function VoucherPage() {
     <div style={{ padding: 40, maxWidth: 700 }}>
       <h1>Invoice to Voucher</h1>
 
+      <div style={{ padding: 15, background: '#fff8e1', marginBottom: 20 }}>
+        <h3>Pending Invoices (uploaded by clients)</h3>
+        {pendingFiles.length === 0 && <p>No invoices waiting.</p>}
+        <ul>
+          {pendingFiles.map((name) => (
+            <li key={name} style={{ marginBottom: 5 }}>
+              {name}{' '}
+              <button onClick={() => handleProcessExisting(name)} style={{ marginLeft: 10 }}>
+                Process this invoice
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
       <div style={{ padding: 15, background: '#f0f0f0', marginBottom: 25 }}>
-        <h3>Step 1: Upload Invoice</h3>
+        <h3>Or upload a new invoice yourself</h3>
         <input
           type="file"
           onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
@@ -227,7 +260,7 @@ export default function VoucherPage() {
         </button>
       </div>
 
-      <h3>Step 2: Review Voucher</h3>
+      <h3>Review Voucher</h3>
 
       <div style={{ marginBottom: 15 }}>
         <label>Voucher Number: </label>
